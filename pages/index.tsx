@@ -1,158 +1,109 @@
-"use client";
+import React, { useState, useEffect } from 'react';
+import Head from 'next/head';
+import Header from '../components/Header';
+import ImageModal from '../components/ImageModal';
+import { listImages, ImageItem } from '../utils/listImages';
 
-import { useEffect, useState } from "react";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth } from "../lib/firebase";
-import { useRouter } from "next/router";
-import Image from "next/image";
+function getDownloadUrl(img: ImageItem, type: 'svg' | 'png') {
+  if (type === 'svg') return img.url;
+  if (type === 'png') {
+    return img.url.replace(/\.svg$/, '.png');
+  }
+  return img.url;
+}
 
-const dummyImages = [
-  { id: 1, src: "/images/sample1.svg", alt: "Illustration 1" },
-  { id: 2, src: "/images/sample2.svg", alt: "Illustration 2" },
-  { id: 3, src: "/images/sample3.svg", alt: "Illustration 3" }
-];
-
-export default function HomePage() {
-  const [user, setUser] = useState<any>(null);
-  const [selectedImage, setSelectedImage] = useState<any>(null);
-  const router = useRouter();
+function Page() {
+  const [categories, setCategories] = useState<{ id: string; name: string; slug: string }[]>([]);
+  const [selected, setSelected] = useState<string>('all');
+  const [images, setImages] = useState<ImageItem[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalImage, setModalImage] = useState<ImageItem | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser);
-    });
-    return () => unsubscribe();
+    fetch('/api/categories')
+      .then(res => res.json())
+      .then(data => setCategories(data))
+      .catch(err => console.error('카테고리 로드 실패:', err));
   }, []);
 
-  const handleDownload = (src: string) => {
-    if (!user) {
-      router.push("/login");
-      return;
-    }
+  useEffect(() => {
+    listImages()
+      .then(result => {
+        const filtered = result
+          .filter(item => item.name.includes('/'))
+          .filter(item => selected === 'all' || item.name.startsWith(selected + '/'));
+        setImages(filtered);
+      })
+      .catch(err => console.error('이미지 로드 실패:', err));
+  }, [selected]);
 
-    const link = document.createElement("a");
-    link.href = src;
-    link.download = src.split("/").pop() || "image.svg";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const openModal = (img: ImageItem) => {
+    setModalImage(img);
+    setModalOpen(true);
   };
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    setUser(null);
+  const closeModal = () => {
+    setModalOpen(false);
+    setModalImage(null);
   };
 
   return (
-    <div style={{ fontFamily: "sans-serif" }}>
-      {/* Header */}
-      <header
-        style={{
-          background: "#f5f5f5",
-          padding: "1rem 2rem",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center"
-        }}
-      >
-        <h2 style={{ margin: 0, cursor: "pointer" }} onClick={() => router.push("/")}>
-          youneedimg
-        </h2>
-        <nav>
-          {user ? (
-            <>
-              <span style={{ marginRight: "1rem" }}>{user.email}</span>
-              <button onClick={handleLogout}>로그아웃</button>
-            </>
-          ) : (
-            <>
-              <button onClick={() => router.push("/login")}>로그인</button>
-              <button onClick={() => router.push("/signup")}>회원가입</button>
-            </>
-          )}
-        </nav>
-      </header>
-
-      {/* Main Content */}
-      <main style={{ padding: "2rem" }}>
-        <h1>AI 일러스트</h1>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-            gap: "1.5rem"
-          }}
-        >
-          {dummyImages.map((img) => (
-            <div
-              key={img.id}
-              style={{
-                border: "1px solid #ddd",
-                borderRadius: "8px",
-                padding: "1rem",
-                textAlign: "center",
-                cursor: "pointer"
-              }}
-              onClick={() => setSelectedImage(img)}
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white text-gray-800">
+      <Head>
+        <title>YouNeedImg</title>
+      </Head>
+      <Header />
+      <main className="flex flex-col items-center max-w-4xl mx-auto px-4 py-12">
+        {/* 카테고리 버튼 그룹 */}
+        <div className="flex flex-wrap justify-center gap-3 mb-10">
+          <button
+            className={
+              "px-6 py-2 rounded-full font-semibold shadow transition " +
+              (selected === 'all' ? 'bg-blue-600 text-white' : 'bg-white border border-blue-300 hover:bg-blue-100')
+            }
+            onClick={() => setSelected('all')}
+          >
+            전체
+          </button>
+          {categories.map(cat => (
+            <button
+              key={cat.id}
+              className={
+                "px-6 py-2 rounded-full font-semibold shadow transition " +
+                (selected === cat.slug ? 'bg-blue-600 text-white' : 'bg-white border border-blue-300 hover:bg-blue-100')
+              }
+              onClick={() => setSelected(cat.slug)}
             >
-              <Image src={img.src} alt={img.alt} width={150} height={150} />
-              <p>{img.alt}</p>
+              {cat.name}
+            </button>
+          ))}
+        </div>
+        {/* 이미지 그리드 */}
+        <div className="w-full grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-8 justify-items-center">
+          {images.map(img => (
+            <div
+              key={img.name}
+              className="rounded-xl bg-white border shadow-md hover:shadow-xl cursor-pointer transition flex flex-col items-center p-4"
+              onClick={() => openModal(img)}
+              style={{ minWidth: 140, minHeight: 140 }}
+            >
+              <img
+                src={img.url}
+                alt={img.name}
+                className="w-24 h-24 object-contain bg-gray-100 rounded mb-2"
+              />
             </div>
           ))}
         </div>
       </main>
-
-      {/* Modal */}
-      {selectedImage && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            width: "100vw",
-            height: "100vh",
-            background: "rgba(0,0,0,0.6)",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-            zIndex: 1000
-          }}
-          onClick={() => setSelectedImage(null)}
-        >
-          <div
-            style={{
-              background: "#fff",
-              padding: "2rem",
-              borderRadius: "8px",
-              minWidth: "300px",
-              maxWidth: "90vw"
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Image
-              src={selectedImage.src}
-              alt={selectedImage.alt}
-              width={300}
-              height={300}
-            />
-            <p>{selectedImage.alt}</p>
-            <button onClick={() => handleDownload(selectedImage.src)}>다운로드</button>
-          </div>
-        </div>
-      )}
-
-      {/* Footer */}
-      <footer
-        style={{
-          marginTop: "3rem",
-          padding: "1rem",
-          textAlign: "center",
-          borderTop: "1px solid #ccc",
-          color: "#777"
-        }}
-      >
-        © {new Date().getFullYear()} youneedimg
-      </footer>
+      <ImageModal
+        open={modalOpen}
+        onClose={closeModal}
+        image={modalImage}
+        getDownloadUrl={getDownloadUrl}
+      />
     </div>
   );
 }
+
+export default Page;

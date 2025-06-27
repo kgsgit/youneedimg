@@ -2,18 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { auth } from "../../lib/firebase";
+import { auth } from "@/lib/firebase";
 import { useRouter } from "next/router";
+import { uploadViaApi } from "@/utils/uploadViaApi";
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
+  const [category, setCategory] = useState("svg");
   const [uploading, setUploading] = useState(false);
   const [downloadURL, setDownloadURL] = useState("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const router = useRouter();
 
-  // 관리자 이메일 설정 (이 부분에 원하는 관리자 이메일 넣으세요)
   const ADMIN_EMAIL = "okgso@naver.com";
 
   useEffect(() => {
@@ -41,14 +41,10 @@ export default function UploadPage() {
   const handleUpload = async () => {
     if (!file) return;
 
-    const storage = getStorage();
-    const fileRef = ref(storage, `images/${file.name}`);
     setUploading(true);
-
     try {
-      await uploadBytes(fileRef, file);
-      const url = await getDownloadURL(fileRef);
-      setDownloadURL(url);
+      const publicUrl = await uploadViaApi(file, category);
+      setDownloadURL(publicUrl);
       alert("업로드 성공");
     } catch (error: any) {
       alert("업로드 실패: " + error.message);
@@ -62,10 +58,31 @@ export default function UploadPage() {
   return (
     <div style={{ padding: "2rem" }}>
       <h1>관리자 이미지 업로드</h1>
-      <input type="file" accept=".svg" onChange={handleFileChange} />
-      <button onClick={handleUpload} disabled={!file || uploading}>
-        {uploading ? "업로드 중..." : "업로드"}
-      </button>
+
+      <label>
+        카테고리:
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          style={{ marginLeft: "1rem" }}
+        >
+          <option value="svg">SVG</option>
+          <option value="png">PNG</option>
+          <option value="ai">AI</option>
+        </select>
+      </label>
+
+      <div style={{ marginTop: "1rem" }}>
+        <input type="file" accept="image/*" onChange={handleFileChange} />
+        <button
+          onClick={handleUpload}
+          disabled={!file || uploading}
+          style={{ marginLeft: "1rem" }}
+        >
+          {uploading ? "업로드 중..." : "업로드"}
+        </button>
+      </div>
+
       {downloadURL && (
         <div style={{ marginTop: "1rem" }}>
           <p>다운로드 URL:</p>
